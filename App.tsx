@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Spread, Rune, Reading, ReadingInterpretation, PatternAnalysis, SelectedRune } from './types';
 import { ELDER_FUTHARK, SPREADS } from './constants';
@@ -55,11 +56,18 @@ const App: React.FC = () => {
         if (!currentSpread || selectedRunes.length >= currentSpread.runeCount) return;
         if (selectedRunes.some(r => r.runeName === rune.name)) return;
         
+        const isReversible = rune.meaning !== rune.reversedMeaning;
+
         if (readingMode === 'virtual') {
-            const orientation = Math.random() < 0.5 ? 'upright' : 'reversed';
+            const orientation = isReversible && Math.random() < 0.5 ? 'reversed' : 'upright';
             setSelectedRunes(prev => [...prev, { runeName: rune.name, orientation }]);
         } else { // physical mode
-            setActiveRuneForSelection(rune);
+            if (isReversible) {
+                setActiveRuneForSelection(rune);
+            } else {
+                // For non-reversible runes, add directly as upright
+                setSelectedRunes(prev => [...prev, { runeName: rune.name, orientation: 'upright' }]);
+            }
         }
     };
 
