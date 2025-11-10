@@ -28,6 +28,8 @@ const App: React.FC = () => {
     const [readingResult, setReadingResult] = useState<Reading | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [activeRuneForSelection, setActiveRuneForSelection] = useState<Rune | null>(null);
+    const [needsFocus, setNeedsFocus] = useState(false); // State for the new focus view
+    const [showFocusMessage, setShowFocusMessage] = useState(true);
     
     // State for analysis
     const [analysis, setAnalysis] = useState<PatternAnalysis | null>(null);
@@ -38,6 +40,10 @@ const App: React.FC = () => {
         const savedRetention = localStorage.getItem('runecast_retention');
         if (savedRetention) {
             setRetentionDays(parseInt(savedRetention, 10));
+        }
+        const savedShowFocus = localStorage.getItem('runecast_showFocusMessage');
+        if (savedShowFocus !== null) {
+            setShowFocusMessage(JSON.parse(savedShowFocus));
         }
     }, []);
 
@@ -50,6 +56,9 @@ const App: React.FC = () => {
         setSelectedRunes([]);
         setReadingResult(null);
         setShuffledRunes(shuffleArray(ELDER_FUTHARK));
+        if (showFocusMessage) {
+            setNeedsFocus(true);
+        }
     };
     
     const handleSelectRune = (rune: Rune) => {
@@ -117,6 +126,7 @@ const App: React.FC = () => {
         setSelectedRunes([]);
         setReadingResult(null);
         setReadingMode(null);
+        setNeedsFocus(false);
     };
 
     const handlePruneReadings = () => {
@@ -129,6 +139,11 @@ const App: React.FC = () => {
         setRetentionDays(days);
         localStorage.setItem('runecast_retention', days.toString());
     };
+    
+    const handleSetShowFocusMessage = (show: boolean) => {
+        setShowFocusMessage(show);
+        localStorage.setItem('runecast_showFocusMessage', JSON.stringify(show));
+    }
 
     const handleGenerateAnalysis = async () => {
         setIsAnalyzing(true);
@@ -144,6 +159,9 @@ const App: React.FC = () => {
         }
         if (readingResult) {
             return <ReadingResultView result={readingResult} onSave={saveCurrentReading} onDiscard={resetReadingFlow} />;
+        }
+        if (needsFocus) {
+             return <FocusView onContinue={() => setNeedsFocus(false)} onSetShowAgain={handleSetShowFocusMessage} />;
         }
         if (currentSpread && readingMode) {
             return (
@@ -206,6 +224,40 @@ const App: React.FC = () => {
 
 
 // Sub-components for views to keep App.tsx cleaner
+
+const FocusView: React.FC<{
+    onContinue: () => void;
+    onSetShowAgain: (show: boolean) => void;
+}> = ({ onContinue, onSetShowAgain }) => (
+    <div className="max-w-2xl mx-auto text-center animate-fade-in">
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-8 rounded-lg border border-slate-700 shadow-lg shadow-amber-900/20">
+            <h2 className="text-3xl font-display text-amber-200 mb-6">A Moment of Focus</h2>
+            <p className="text-slate-300 text-lg leading-relaxed mb-8">
+                 “Warriors, the servants of civilization. Hundreds of years have passed. The voices that once whispered to others now whisper to us. And to hear them? All that is required is for you to honor your own nature and know the stillness within. To that end when consulting the Runes, a single question, a simple prayer, will always suffice: <strong className="text-amber-300 block mt-2">Show me what I need to know for my life now.</strong>”
+            </p>
+            
+            <button 
+                onClick={onContinue} 
+                className="px-8 py-3 bg-amber-500 text-slate-900 font-bold rounded-full hover:bg-amber-400 transition-transform transform hover:scale-105 mb-6"
+            >
+                Continue to Casting
+            </button>
+
+            <div className="flex items-center justify-center">
+                <input 
+                    type="checkbox" 
+                    id="showAgain" 
+                    className="h-4 w-4 rounded border-slate-500 bg-slate-700 text-amber-500 focus:ring-amber-400"
+                    onChange={(e) => onSetShowAgain(!e.target.checked)}
+                    aria-label="Don't show this again"
+                />
+                <label htmlFor="showAgain" className="ml-2 text-sm text-slate-400 cursor-pointer">
+                    Don't show this again
+                </label>
+            </div>
+        </div>
+    </div>
+);
 
 const SelectReadingModeView: React.FC<{onSelectMode: (mode: 'physical' | 'virtual') => void}> = ({ onSelectMode }) => (
     <div className="text-center animate-fade-in">
@@ -449,18 +501,44 @@ const AnalysisView: React.FC<{
                             {analysis.recurringThemes.map((theme, i) => <li key={i}>{theme}</li>)}
                         </ul>
                     </div>
-                     <div>
+                    <div>
                         <h3 className="text-xl font-display text-amber-300 mb-2">Frequent Runes</h3>
                         <div className="space-y-4">
                             {analysis.frequentRunes.map((item, i) => (
                                 <div key={i} className="p-4 bg-slate-900/50 rounded-md border border-slate-700">
                                     <p className="font-bold text-amber-200">{item.runeName} (Pulled {item.count} times)</p>
-
                                     <p className="text-slate-400 text-sm mt-1">{item.interpretation}</p>
                                 </div>
                             ))}
                         </div>
                     </div>
+                    
+                    {analysis.frequentRunes.length > 0 && (
+                        <div>
+                            <h3 className="text-xl font-display text-amber-300 mb-4 mt-6">Rune Frequency Chart</h3>
+                            <div className="space-y-3 bg-slate-900/50 p-4 rounded-md border border-slate-700">
+                                {(() => {
+                                    const sortedRunes = [...analysis.frequentRunes].sort((a, b) => b.count - a.count);
+                                    const maxCount = Math.max(...sortedRunes.map(r => r.count), 0);
+                                    if (maxCount === 0) return <p className="text-slate-400">No data to display.</p>;
+                                    
+                                    return sortedRunes.map((item, i) => (
+                                        <div key={i} className="flex items-center gap-4 text-sm animate-fade-in-stagger" style={{animationDelay: `${i * 100}ms`}}>
+                                            <span className="w-28 text-right font-medium text-slate-300 truncate" title={item.runeName}>{item.runeName}</span>
+                                            <div className="flex-1 bg-slate-700 rounded-full h-6 flex items-center">
+                                                <div 
+                                                    className="bg-gradient-to-r from-amber-500 to-amber-400 h-full rounded-full flex items-center justify-end px-2 text-slate-900 font-bold transition-all duration-1000 ease-out"
+                                                    style={{ width: `${(item.count / maxCount) * 100}%`}}
+                                                >
+                                                   <span className="opacity-0 animate-fade-in" style={{animationDelay: '1s'}}>{item.count}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ));
+                                })()}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
