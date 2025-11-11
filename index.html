@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -14,7 +13,6 @@
       body {
         font-family: 'Inter', sans-serif;
         position: relative;
-        overflow-x: hidden;
       }
       body::before {
         content: '';
@@ -123,6 +121,22 @@
         100% { opacity: 0; transform: scale(1.5); }
       }
       
+      /* Reading Completion Animations */
+      @keyframes runeGather {
+        0% { transform: scale(1); opacity: 1; filter: brightness(1.1); }
+        60% { transform: scale(1.3); opacity: 1; filter: brightness(1.5); }
+        100% { transform: scale(0.2); opacity: 0; filter: brightness(2); }
+      }
+      .animate-rune-gather {
+        animation: runeGather 1.8s ease-in-out;
+      }
+      @keyframes runeFadeOut {
+        to { opacity: 0; transform: scale(0.8); }
+      }
+      .animate-rune-fade-out {
+        animation: runeFadeOut 1s ease-in-out;
+      }
+
       /* Print Styles */
       @media print {
         body {

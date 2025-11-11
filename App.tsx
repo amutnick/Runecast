@@ -28,6 +28,7 @@ const App: React.FC = () => {
     const [shuffledRunes, setShuffledRunes] = useState<Rune[]>([]);
     const [readingResult, setReadingResult] = useState<Reading | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isCompletingReading, setIsCompletingReading] = useState(false);
     const [activeRuneForSelection, setActiveRuneForSelection] = useState<Rune | null>(null);
     const [needsFocus, setNeedsFocus] = useState(false); // State for the new focus view
     const [showFocusMessage, setShowFocusMessage] = useState(true);
@@ -121,8 +122,17 @@ const App: React.FC = () => {
     };
     
     useEffect(() => {
-        if (currentSpread && selectedRunes.length === currentSpread.runeCount) {
-            handleReadingComplete();
+        const readingIsReadyToComplete = currentSpread && selectedRunes.length === currentSpread.runeCount && !isLoading && !readingResult;
+
+        if (readingIsReadyToComplete) {
+            if (readingMode === 'virtual' && !isCompletingReading) {
+                 setIsCompletingReading(true);
+                 setTimeout(() => {
+                    handleReadingComplete();
+                }, 2000); // Animation duration
+            } else if (readingMode === 'physical') {
+                handleReadingComplete();
+            }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedRunes, currentSpread]);
@@ -140,6 +150,7 @@ const App: React.FC = () => {
         setReadingResult(null);
         setReadingMode(null);
         setNeedsFocus(false);
+        setIsCompletingReading(false);
     };
 
     const handlePruneReadings = () => {
@@ -193,6 +204,7 @@ const App: React.FC = () => {
                         shuffledRunes={shuffledRunes} 
                         onReset={resetReadingFlow} 
                         readingMode={readingMode}
+                        isCompleting={isCompletingReading}
                     />
                     {activeRuneForSelection && (
                         <OrientationSelectionModal 
@@ -348,7 +360,8 @@ const SelectRunesView: React.FC<{
     shuffledRunes: Rune[];
     onReset: () => void;
     readingMode: 'physical' | 'virtual';
-}> = ({ spread, selectedRunes, onSelectRune, shuffledRunes, onReset, readingMode }) => {
+    isCompleting: boolean;
+}> = ({ spread, selectedRunes, onSelectRune, shuffledRunes, onReset, readingMode, isCompleting }) => {
     const selectedRuneNames = useMemo(() => new Set(selectedRunes.map(r => r.runeName)), [selectedRunes]);
 
     const displayRunes = useMemo(() => {
@@ -359,25 +372,35 @@ const SelectRunesView: React.FC<{
     }, [readingMode, shuffledRunes]);
     
     return (
-        <div className="animate-fade-in">
+        <div className={`animate-fade-in ${isCompleting ? 'pointer-events-none' : ''}`}>
             <div className="text-center mb-8">
                 <h2 className="text-3xl text-amber-200 font-display shimmer-text">
-                    {readingMode === 'physical' ? 'Record Your Runes' : 'Cast your Runes'}
+                    {isCompleting ? 'The runes are cast...' : readingMode === 'physical' ? 'Record Your Runes' : 'Cast your Runes'}
                 </h2>
-                <p className="text-slate-400">Select {spread.runeCount - selectedRunes.length} more rune{spread.runeCount - selectedRunes.length !== 1 ? 's' : ''}.</p>
-                <button onClick={onReset} className="mt-2 text-sm text-amber-400 hover:text-amber-200">&larr; Start Over</button>
+                <p className={`text-slate-400 transition-opacity duration-500 ${isCompleting ? 'opacity-0' : 'opacity-100'}`}>
+                    {spread.runeCount > selectedRunes.length ? `Select ${spread.runeCount - selectedRunes.length} more rune${spread.runeCount - selectedRunes.length !== 1 ? 's' : ''}.` : 'All runes selected.'}
+                </p>
+                <button onClick={onReset} className={`mt-2 text-sm text-amber-400 hover:text-amber-200 transition-opacity duration-500 ${isCompleting ? 'opacity-0' : 'opacity-100'}`}>&larr; Start Over</button>
             </div>
             <div className="flex flex-wrap gap-4 justify-center">
                 {displayRunes.map((rune, index) => {
                     const isSelected = selectedRuneNames.has(rune.name);
                     const selectedRuneData = isSelected ? selectedRunes.find(r => r.runeName === rune.name) : null;
                     const isFaceDown = readingMode === 'virtual' && !isSelected;
+                    const selectionOrder = isSelected ? selectedRunes.findIndex(sr => sr.runeName === rune.name) : -1;
 
                     return (
                         <div 
                             key={rune.name}
-                            className="animate-fade-in-stagger"
-                            style={{ animationDelay: `${index * 30}ms` }}
+                            className={`
+                                ${!isCompleting ? 'animate-fade-in-stagger' : ''}
+                                ${isCompleting && isSelected ? 'animate-rune-gather' : ''}
+                                ${isCompleting && !isSelected ? 'animate-rune-fade-out' : ''}
+                            `}
+                            style={{
+                                animationDelay: !isCompleting ? `${index * 30}ms` : (isCompleting && isSelected ? `${selectionOrder * 100}ms` : `${Math.random() * 300}ms`),
+                                animationFillMode: 'forwards'
+                            }}
                         >
                             <RuneDisplay 
                                 rune={rune}
@@ -488,7 +511,7 @@ const HistoryView: React.FC<{readings: Reading[]; printingReadingId: number | nu
         <div className="max-w-4xl mx-auto space-y-4 animate-fade-in">
             <h2 className="text-3xl text-amber-200 font-display text-center mb-6 shimmer-text">Reading History</h2>
             {readings.map(reading => (
-                <div key={reading.id} className={`bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden transition-shadow hover:shadow-lg hover:shadow-amber-900/20 reading-history-item ${printingReadingId === reading.id ? 'print-this-reading' : ''}`}>
+                <div key={reading.id} className={`bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden reading-history-item ${printingReadingId === reading.id ? 'print-this-reading' : ''}`}>
                     <button onClick={() => setExpandedId(expandedId === reading.id ? null : reading.id)} className="w-full p-4 text-left flex justify-between items-center no-print">
                         <div>
                             <p className="font-bold text-amber-300">{new Date(reading.date).toLocaleString()}</p>
@@ -497,7 +520,7 @@ const HistoryView: React.FC<{readings: Reading[]; printingReadingId: number | nu
                         <svg className={`w-6 h-6 text-slate-400 transition-transform ${expandedId === reading.id ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </button>
                     {(expandedId === reading.id || printingReadingId === reading.id) && (
-                        <div className="bg-slate-900/70 p-4 md:p-6 border-t border-slate-700">
+                        <div className="p-4 md:p-6 border-t border-slate-700">
                              <ReadingResultView result={reading} isJournalView={true} onExport={onExport} />
                         </div>
                     )}
