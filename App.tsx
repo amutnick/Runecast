@@ -6,6 +6,7 @@ import * as storage from './services/storageService';
 import * as gemini from './services/geminiService';
 import Header from './components/Header';
 import RuneDisplay from './components/RuneDisplay';
+import MysticalParticles from './components/MysticalParticles';
 
 // Helper function to shuffle an array
 const shuffleArray = <T,>(array: T[]): T[] => {
@@ -34,6 +35,10 @@ const App: React.FC = () => {
     // State for analysis
     const [analysis, setAnalysis] = useState<PatternAnalysis | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    
+    // State for printing
+    const [printingReadingId, setPrintingReadingId] = useState<number | null>(null);
+
 
     useEffect(() => {
         setReadings(storage.getReadings());
@@ -45,6 +50,14 @@ const App: React.FC = () => {
         if (savedShowFocus !== null) {
             setShowFocusMessage(JSON.parse(savedShowFocus));
         }
+    }, []);
+    
+    useEffect(() => {
+        const handleAfterPrint = () => {
+            setPrintingReadingId(null);
+        };
+        window.addEventListener('afterprint', handleAfterPrint);
+        return () => window.removeEventListener('afterprint', handleAfterPrint);
     }, []);
 
     const handleSelectReadingMode = (mode: 'physical' | 'virtual') => {
@@ -152,6 +165,13 @@ const App: React.FC = () => {
         setAnalysis(result);
         setIsAnalyzing(false);
     };
+    
+    const handleExportReading = (readingId: number) => {
+        setPrintingReadingId(readingId);
+        setTimeout(() => {
+            window.print();
+        }, 100);
+    };
 
     const renderHome = () => {
         if (isLoading) {
@@ -195,7 +215,7 @@ const App: React.FC = () => {
             case 'home':
                 return renderHome();
             case 'history':
-                return <HistoryView readings={readings} />;
+                return <HistoryView readings={readings} printingReadingId={printingReadingId} onExport={handleExportReading} />;
             case 'analysis':
                 return <AnalysisView readings={readings} analysis={analysis} isAnalyzing={isAnalyzing} onGenerate={handleGenerateAnalysis} />;
             case 'about':
@@ -205,7 +225,6 @@ const App: React.FC = () => {
                     retentionDays={retentionDays}
                     onSetRetention={handleSetRetention}
                     onPrune={handlePruneReadings}
-                    onExport={storage.exportReadingsAsMarkdown}
                 />;
             default:
                 return renderHome();
@@ -214,6 +233,7 @@ const App: React.FC = () => {
     
     return (
         <div className="min-h-screen bg-slate-900">
+            <MysticalParticles />
             <Header currentView={view} setView={setView} />
             <main className="container mx-auto p-4 md:p-8">
                 {renderContent()}
@@ -231,7 +251,7 @@ const FocusView: React.FC<{
 }> = ({ onContinue, onSetShowAgain }) => (
     <div className="max-w-2xl mx-auto text-center animate-fade-in">
         <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-8 rounded-lg border border-slate-700 shadow-lg shadow-amber-900/20">
-            <h2 className="text-3xl font-display text-amber-200 mb-6">A Moment of Focus</h2>
+            <h2 className="text-3xl font-display text-amber-200 mb-6 shimmer-text">A Moment of Focus</h2>
             <p className="text-slate-300 text-lg leading-relaxed mb-8">
                  “Warriors, the servants of civilization. Hundreds of years have passed. The voices that once whispered to others now whisper to us. And to hear them? All that is required is for you to honor your own nature and know the stillness within. To that end when consulting the Runes, a single question, a simple prayer, will always suffice: <strong className="text-amber-300 block mt-2">Show me what I need to know for my life now.</strong>”
             </p>
@@ -261,14 +281,14 @@ const FocusView: React.FC<{
 
 const SelectReadingModeView: React.FC<{onSelectMode: (mode: 'physical' | 'virtual') => void}> = ({ onSelectMode }) => (
     <div className="text-center animate-fade-in">
-        <h2 className="text-3xl md:text-4xl text-amber-200 font-display mb-2">Begin a Reading</h2>
+        <h2 className="text-3xl md:text-4xl text-amber-200 font-display mb-2 shimmer-text">Begin a Reading</h2>
         <p className="text-slate-400 mb-8 max-w-2xl mx-auto">Are you using your own physical runes or would you like to draw from our virtual pouch?</p>
         <div className="flex flex-col md:flex-row justify-center gap-6 max-w-2xl mx-auto">
-            <button onClick={() => onSelectMode('physical')} className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-lg border-2 border-slate-700 hover:border-amber-400 shadow-lg hover:shadow-amber-900/50 transition-all duration-300 text-left transform hover:-translate-y-1 flex-1">
+            <button onClick={() => onSelectMode('physical')} className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-lg border-2 border-slate-700 hover:border-amber-400 shadow-lg hover:shadow-amber-900/50 transition-all duration-300 text-left transform hover:-translate-y-1">
                 <h3 className="text-2xl font-display text-amber-300">Physical Reading</h3>
                 <p className="text-slate-400 mt-2">I have my own set of runes. I will select the ones I've drawn.</p>
             </button>
-            <button onClick={() => onSelectMode('virtual')} className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-lg border-2 border-slate-700 hover:border-amber-400 shadow-lg hover:shadow-amber-900/50 transition-all duration-300 text-left transform hover:-translate-y-1 flex-1">
+            <button onClick={() => onSelectMode('virtual')} className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-lg border-2 border-slate-700 hover:border-amber-400 shadow-lg hover:shadow-amber-900/50 transition-all duration-300 text-left transform hover:-translate-y-1">
                 <h3 className="text-2xl font-display text-amber-300">Virtual Reading</h3>
                 <p className="text-slate-400 mt-2">Draw runes from a shuffled virtual pouch for a digital reading.</p>
             </button>
@@ -286,7 +306,7 @@ const OrientationSelectionModal: React.FC<{
             <button onClick={onCancel} className="absolute top-2 right-2 text-slate-500 hover:text-white transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
-            <h3 className="text-2xl font-display text-amber-200 mb-4">Choose Orientation for {rune.name}</h3>
+            <h3 className="text-2xl font-display text-amber-200 mb-4 shimmer-text">Choose Orientation for {rune.name}</h3>
             <div className="flex justify-center gap-8 mb-6">
                 <div className="flex flex-col items-center">
                     <RuneDisplay rune={rune} orientation="upright" className="w-24"/>
@@ -307,7 +327,7 @@ const SelectSpreadView: React.FC<{
     onBack: () => void;
 }> = ({ onSelectSpread, onBack }) => (
     <div className="text-center animate-fade-in">
-        <h2 className="text-3xl md:text-4xl text-amber-200 font-display mb-2">Choose a Spread</h2>
+        <h2 className="text-3xl md:text-4xl text-amber-200 font-display mb-2 shimmer-text">Choose a Spread</h2>
         <p className="text-slate-400 mb-6 max-w-2xl mx-auto">Each spread offers a different level of depth for your reading.</p>
         <button onClick={onBack} className="mb-8 text-sm text-amber-400 hover:text-amber-200">&larr; Change reading type</button>
         <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
@@ -341,27 +361,32 @@ const SelectRunesView: React.FC<{
     return (
         <div className="animate-fade-in">
             <div className="text-center mb-8">
-                <h2 className="text-3xl text-amber-200 font-display">
+                <h2 className="text-3xl text-amber-200 font-display shimmer-text">
                     {readingMode === 'physical' ? 'Record Your Runes' : 'Cast your Runes'}
                 </h2>
                 <p className="text-slate-400">Select {spread.runeCount - selectedRunes.length} more rune{spread.runeCount - selectedRunes.length !== 1 ? 's' : ''}.</p>
                 <button onClick={onReset} className="mt-2 text-sm text-amber-400 hover:text-amber-200">&larr; Start Over</button>
             </div>
             <div className="flex flex-wrap gap-4 justify-center">
-                {displayRunes.map(rune => {
+                {displayRunes.map((rune, index) => {
                     const isSelected = selectedRuneNames.has(rune.name);
                     const selectedRuneData = isSelected ? selectedRunes.find(r => r.runeName === rune.name) : null;
                     const isFaceDown = readingMode === 'virtual' && !isSelected;
 
                     return (
-                        <RuneDisplay 
+                        <div 
                             key={rune.name}
-                            rune={rune}
-                            isFaceDown={isFaceDown}
-                            isSelected={isSelected}
-                            onClick={() => !isSelected && onSelectRune(rune)}
-                            orientation={selectedRuneData?.orientation}
-                        />
+                            className="animate-fade-in-stagger"
+                            style={{ animationDelay: `${index * 30}ms` }}
+                        >
+                            <RuneDisplay 
+                                rune={rune}
+                                isFaceDown={isFaceDown}
+                                isSelected={isSelected}
+                                onClick={() => !isSelected && onSelectRune(rune)}
+                                orientation={selectedRuneData?.orientation}
+                            />
+                        </div>
                     );
                 })}
             </div>
@@ -369,9 +394,9 @@ const SelectRunesView: React.FC<{
     );
 };
 
-const ReadingResultView: React.FC<{result: Reading; onSave: () => void; onDiscard: () => void; isJournalView?: boolean}> = ({ result, onSave, onDiscard, isJournalView = false }) => (
+const ReadingResultView: React.FC<{result: Reading; onSave?: () => void; onDiscard?: () => void; isJournalView?: boolean, onExport?: (id: number) => void}> = ({ result, onSave, onDiscard, isJournalView = false, onExport }) => (
     <div className="max-w-4xl mx-auto">
-        <h2 className="text-center text-3xl text-amber-200 font-display mb-8 animate-fade-in-stagger">{result.spread.name} Reading</h2>
+        <h2 className="text-center text-3xl text-amber-200 font-display mb-8 animate-fade-in-stagger shimmer-text">{result.spread.name} Reading</h2>
 
         <div className="space-y-8 mb-8">
             {result.runes.map((selectedRune, index) => {
@@ -417,7 +442,7 @@ const ReadingResultView: React.FC<{result: Reading; onSave: () => void; onDiscar
             </div>
         </div>
 
-        {!isJournalView && (
+        {!isJournalView && onSave && onDiscard && (
             <div 
                 className="flex justify-center gap-4 mt-8 animate-fade-in-stagger"
                 style={{animationDelay: `${(result.runes.length + 1) * 200}ms`}}
@@ -426,18 +451,33 @@ const ReadingResultView: React.FC<{result: Reading; onSave: () => void; onDiscar
                 <button onClick={onDiscard} className="px-6 py-2 bg-slate-700 text-slate-200 font-bold rounded-full hover:bg-slate-600 transition">Discard</button>
             </div>
         )}
+        {isJournalView && onExport && (
+            <div className="flex justify-center mt-6 no-print">
+                 <button onClick={() => onExport(result.id)} className="px-6 py-2 bg-slate-600 text-slate-200 font-bold rounded-full hover:bg-slate-500 transition">Export as PDF</button>
+            </div>
+        )}
     </div>
 );
 
 
 const LoadingView: React.FC<{message: string}> = ({ message }) => (
     <div className="text-center p-16 flex flex-col items-center justify-center animate-fade-in">
-        <div className="w-16 h-16 border-4 border-amber-300 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-xl text-amber-200 font-display">{message}</p>
+        <svg 
+            className="w-20 h-20 text-amber-300 mb-6" 
+            viewBox="0 0 100 100" 
+            fill="none" 
+            xmlns="http://www.w3.org/2000/svg"
+            style={{ animation: 'symbolPulse 3s ease-in-out infinite' }}
+        >
+            <circle cx="50" cy="50" r="45" stroke="currentColor" strokeWidth="2"/>
+            <circle cx="50" cy="50" r="10" stroke="currentColor" strokeWidth="2"/>
+            <path d="M50 35 V5 M50 65 V95 M65 50 H95 M35 50 H5 M62.5 37.5 L82.5 17.5 M37.5 62.5 L17.5 82.5 M37.5 37.5 L17.5 17.5 M62.5 62.5 L82.5 82.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+        <p className="text-xl text-amber-200 font-display shimmer-text">{message}</p>
     </div>
 );
 
-const HistoryView: React.FC<{readings: Reading[]}> = ({ readings }) => {
+const HistoryView: React.FC<{readings: Reading[]; printingReadingId: number | null, onExport: (id: number) => void}> = ({ readings, printingReadingId, onExport }) => {
     const [expandedId, setExpandedId] = useState<number | null>(null);
 
     if (readings.length === 0) {
@@ -446,19 +486,19 @@ const HistoryView: React.FC<{readings: Reading[]}> = ({ readings }) => {
 
     return (
         <div className="max-w-4xl mx-auto space-y-4 animate-fade-in">
-            <h2 className="text-3xl text-amber-200 font-display text-center mb-6">Reading History</h2>
+            <h2 className="text-3xl text-amber-200 font-display text-center mb-6 shimmer-text">Reading History</h2>
             {readings.map(reading => (
-                <div key={reading.id} className="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden transition-shadow hover:shadow-lg hover:shadow-amber-900/20">
-                    <button onClick={() => setExpandedId(expandedId === reading.id ? null : reading.id)} className="w-full p-4 text-left flex justify-between items-center">
+                <div key={reading.id} className={`bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden transition-shadow hover:shadow-lg hover:shadow-amber-900/20 reading-history-item ${printingReadingId === reading.id ? 'print-this-reading' : ''}`}>
+                    <button onClick={() => setExpandedId(expandedId === reading.id ? null : reading.id)} className="w-full p-4 text-left flex justify-between items-center no-print">
                         <div>
                             <p className="font-bold text-amber-300">{new Date(reading.date).toLocaleString()}</p>
                             <p className="text-slate-400 text-sm">{reading.spread.name} - {reading.runes.map(r => r.runeName).join(', ')}</p>
                         </div>
                         <svg className={`w-6 h-6 text-slate-400 transition-transform ${expandedId === reading.id ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </button>
-                    {expandedId === reading.id && (
+                    {(expandedId === reading.id || printingReadingId === reading.id) && (
                         <div className="bg-slate-900/70 p-4 md:p-6 border-t border-slate-700">
-                             <ReadingResultView result={reading} onSave={() => {}} onDiscard={() => {}} isJournalView={true} />
+                             <ReadingResultView result={reading} isJournalView={true} onExport={onExport} />
                         </div>
                     )}
                 </div>
@@ -481,7 +521,7 @@ const AnalysisView: React.FC<{
 
     return (
         <div className="max-w-4xl mx-auto text-center animate-fade-in">
-            <h2 className="text-3xl text-amber-200 font-display mb-4">Pattern Analysis</h2>
+            <h2 className="text-3xl text-amber-200 font-display mb-4 shimmer-text">Pattern Analysis</h2>
             <p className="text-slate-400 mb-8">Uncover recurring themes and frequently pulled runes from your reading history.</p>
             <button onClick={onGenerate} disabled={isAnalyzing} className="px-8 py-3 bg-amber-500 text-slate-900 font-bold rounded-full hover:bg-amber-400 transition disabled:bg-slate-600 disabled:cursor-not-allowed">
                 {isAnalyzing ? 'Analyzing...' : 'Generate Analysis'}
@@ -547,7 +587,7 @@ const AnalysisView: React.FC<{
 
 const AboutView: React.FC = () => (
     <div className="max-w-4xl mx-auto animate-fade-in">
-        <h2 className="text-3xl md:text-4xl text-amber-200 font-display text-center mb-4">About the Runes</h2>
+        <h2 className="text-3xl md:text-4xl text-amber-200 font-display text-center mb-4 shimmer-text">About the Runes</h2>
         <p className="text-slate-400 text-center mb-10 max-w-2xl mx-auto">The Elder Futhark is the oldest form of the runic alphabets. It consists of 24 runes, often arranged in three groups of eight called ættir, plus a blank rune representing the unknown.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {ELDER_FUTHARK.map(rune => (
@@ -574,14 +614,13 @@ const AboutView: React.FC = () => (
 const SettingsView: React.FC<{
     retentionDays: number, 
     onSetRetention: (days: number) => void,
-    onPrune: () => void,
-    onExport: () => void
-}> = ({ retentionDays, onSetRetention, onPrune, onExport }) => {
+    onPrune: () => void
+}> = ({ retentionDays, onSetRetention, onPrune }) => {
     const options = [{label: '30 Days', value: 30}, {label: '90 Days', value: 90}, {label: '1 Year', value: 365}, {label: 'All Time', value: -1}];
 
     return (
         <div className="max-w-xl mx-auto space-y-8 animate-fade-in">
-            <h2 className="text-3xl text-amber-200 font-display text-center mb-6">Settings</h2>
+            <h2 className="text-3xl text-amber-200 font-display text-center mb-6 shimmer-text">Settings</h2>
             <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-6 rounded-lg border border-slate-700">
                 <h3 className="text-xl font-display text-amber-300 mb-4">Data Management</h3>
                 <div className="space-y-4">
@@ -600,13 +639,6 @@ const SettingsView: React.FC<{
                         Clear Old Readings Now
                     </button>
                 </div>
-            </div>
-            <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-6 rounded-lg border border-slate-700">
-                <h3 className="text-xl font-display text-amber-300 mb-4">Export History</h3>
-                <p className="text-slate-400 mb-4">Download your entire reading history as a Markdown file for your personal records.</p>
-                <button onClick={onExport} className="w-full px-4 py-2 bg-amber-500 text-slate-900 font-bold rounded-md hover:bg-amber-400 transition">
-                    Export All Readings
-                </button>
             </div>
         </div>
     );

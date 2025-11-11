@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useEffect, useState } from 'react';
 import { Rune } from '../types';
 
 interface RuneDisplayProps {
@@ -12,6 +13,18 @@ interface RuneDisplayProps {
 }
 
 const RuneDisplay: React.FC<RuneDisplayProps> = ({ rune, isFaceDown = false, onClick, isSelected = false, className = '', orientation = 'upright', isGlowing = false }) => {
+  const [wasFaceDown, setWasFaceDown] = useState(isFaceDown);
+  const [isJustRevealed, setIsJustRevealed] = useState(false);
+
+  useEffect(() => {
+    if (wasFaceDown && !isFaceDown) {
+      setIsJustRevealed(true);
+      const timer = setTimeout(() => setIsJustRevealed(false), 500); // Animation duration
+      return () => clearTimeout(timer);
+    }
+    setWasFaceDown(isFaceDown);
+  }, [isFaceDown, wasFaceDown]);
+
   const baseClasses = "aspect-[3/5] w-20 h-auto flex items-center justify-center rounded-lg border-2 transition-all duration-300 transform cursor-pointer";
   const stateClasses = isFaceDown
     ? "bg-slate-700 border-slate-600 hover:bg-slate-600 hover:border-amber-400"
@@ -37,6 +50,7 @@ const RuneDisplay: React.FC<RuneDisplayProps> = ({ rune, isFaceDown = false, onC
 
         {/* Front of the card (face up view) */}
         <div className="absolute w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 rounded-md flex flex-col items-center justify-center text-amber-300 p-2 [transform:rotateY(180deg)] [backface-visibility:hidden]">
+          {isJustRevealed && <div className="flash-effect" />}
           {rune && (
             <>
               <div className={`text-4xl h-12 w-12 flex items-center justify-center transition-transform duration-300 ${orientation === 'reversed' ? 'rotate-180' : ''}`}>{rune.symbol}</div>

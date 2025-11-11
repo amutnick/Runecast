@@ -13,7 +13,25 @@
     <style>
       body {
         font-family: 'Inter', sans-serif;
+        position: relative;
+        overflow-x: hidden;
       }
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        background-image: 
+          radial-gradient(circle at 15% 50%, rgba(14, 165, 233, 0.1), transparent 40%),
+          radial-gradient(circle at 85% 30%, rgba(251, 191, 36, 0.1), transparent 40%),
+          radial-gradient(circle at 50% 80%, rgba(139, 92, 246, 0.1), transparent 40%);
+        background-size: 200% 200%;
+        animation: aurora 25s linear infinite;
+      }
+
       h1, h2, h3, .font-display {
         font-family: 'Cinzel Decorative', serif;
       }
@@ -25,13 +43,121 @@
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
       }
+      
+      @keyframes aurora {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+
       @keyframes subtleGlow {
-        0%, 100% { box-shadow: 0 0 8px 0px rgba(251, 191, 36, 0.3); }
-        50% { box-shadow: 0 0 16px 2px rgba(251, 191, 36, 0.5); }
+        0% {
+          box-shadow: 0 0 5px 0px rgba(251, 191, 36, 0.2), 0 0 2px 0px rgba(251, 191, 36, 0.1) inset;
+          filter: brightness(1);
+        }
+        50% {
+          box-shadow: 0 0 16px 2px rgba(251, 191, 36, 0.6), 0 0 8px 1px rgba(251, 191, 36, 0.3) inset;
+          filter: brightness(1.1);
+        }
+        100% {
+          box-shadow: 0 0 5px 0px rgba(251, 191, 36, 0.2), 0 0 2px 0px rgba(251, 191, 36, 0.1) inset;
+          filter: brightness(1);
+        }
       }
       .glow {
-        animation: subtleGlow 3s ease-in-out infinite;
+        animation: subtleGlow 4s ease-in-out infinite;
       }
+
+      .shimmer-text {
+        position: relative;
+        overflow: hidden;
+        -webkit-mask-image: linear-gradient(-75deg, rgba(0,0,0,.6) 30%, #000 50%, rgba(0,0,0,.6) 70%);
+        -webkit-mask-size: 200%;
+        animation: shimmer 5s infinite;
+      }
+
+      @keyframes shimmer {
+        0% { -webkit-mask-position: 150%; }
+        100% { -webkit-mask-position: -50%; }
+      }
+
+      @keyframes symbolPulse {
+          0% { transform: scale(1) rotate(0deg); opacity: 0.7; }
+          50% { transform: scale(1.05) rotate(180deg); opacity: 1; }
+          100% { transform: scale(1) rotate(360deg); opacity: 0.7; }
+      }
+
+      /* New Animations */
+      .particle-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: -1;
+      }
+      .particle {
+        position: absolute;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(251, 191, 36, 0.6) 0%, rgba(251, 191, 36, 0) 60%);
+        animation: float var(--d) var(--delay) ease-in-out infinite;
+      }
+      @keyframes float {
+        0% { transform: translateY(0px) translateX(0px); opacity: 0.5; }
+        50% { transform: translateY(-25px) translateX(15px); opacity: 0.8; }
+        100% { transform: translateY(0px) translateX(0px); opacity: 0.5; }
+      }
+
+      .flash-effect {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: radial-gradient(circle, rgba(251, 230, 150, 0.7) 0%, rgba(251, 191, 36, 0) 65%);
+        border-radius: inherit;
+        opacity: 0;
+        animation: flash 0.5s ease-out;
+      }
+      @keyframes flash {
+        0% { opacity: 0; transform: scale(0.5); }
+        50% { opacity: 1; transform: scale(1.2); }
+        100% { opacity: 0; transform: scale(1.5); }
+      }
+      
+      /* Print Styles */
+      @media print {
+        body {
+          background: #ffffff !important;
+          color: #000000 !important;
+        }
+        header, .no-print {
+          display: none !important;
+        }
+        main {
+          padding: 0 !important;
+          margin: 0 !important;
+        }
+        .reading-history-item:not(.print-this-reading) {
+          display: none !important;
+        }
+        .print-this-reading {
+          display: block !important;
+          max-width: 100%;
+          margin: 0;
+          padding: 1in;
+          border: none;
+          box-shadow: none;
+        }
+        .print-this-reading .font-display { font-family: 'Cinzel Decorative', serif; }
+        .print-this-reading .text-amber-200, .print-this-reading .text-amber-300, .print-this-reading .text-slate-200 { color: #000000 !important; }
+        .print-this-reading .text-slate-300, .print-this-reading .text-slate-400 { color: #333333 !important; }
+        .print-this-reading .bg-slate-900\/70 { background: transparent !important; padding: 0 !important; }
+        .print-this-reading .shimmer-text { -webkit-mask-image: none; animation: none; }
+        .print-this-reading .border-slate-700 { border: none !important; }
+        .print-this-reading .space-y-8 > div { page-break-inside: avoid; }
+        .print-this-reading .flex-shrink-0, .print-this-reading .glow { display: none !important; }
+        .print-this-reading .whitespace-pre-wrap { white-space: pre-wrap; word-wrap: break-word; }
+      }
+
     </style>
   <script type="importmap">
 {
