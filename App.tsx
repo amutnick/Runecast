@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, ReactNode } from 'react';
 import { View, Spread, Rune, Reading, ReadingInterpretation, PatternAnalysis, SelectedRune } from './types';
 import { ELDER_FUTHARK, SPREADS } from './constants';
 import * as storage from './services/storageService';
@@ -14,7 +14,6 @@ const shuffleArray = <T,>(array: T[]): T[] => {
     .sort((a, b) => a.sort - b.sort)
     .map(({ value }) => value);
 };
-
 
 const App: React.FC = () => {
     const [view, setView] = useState<View>('home');
@@ -183,13 +182,110 @@ const App: React.FC = () => {
             window.print();
         }, 100);
     };
+    
+    const handleDownloadApp = async () => {
+        try {
+            const filesToFetch = [
+                './App.tsx',
+                './types.ts',
+                './constants.tsx',
+                './services/storageService.ts',
+                './services/geminiService.ts',
+                './components/Header.tsx',
+                './components/RuneDisplay.tsx',
+                './components/MysticalParticles.tsx',
+                './index.tsx',
+                './index.html',
+            ];
+
+            const filePromises = filesToFetch.map(url => fetch(url).then(res => {
+                if (!res.ok) throw new Error(`Failed to fetch ${url}`);
+                return res.text();
+            }));
+            
+            const [
+                appTsxContent,
+                typesTsContent,
+                constantsTsxContent,
+                storageServiceTsContent,
+                geminiServiceTsContent,
+                headerTsxContent,
+                runeDisplayTsxContent,
+                mysticalParticlesTsxContent,
+                indexTsxContent,
+                indexHtmlContent,
+            ] = await Promise.all(filePromises);
+
+            // 1. Split App.tsx into main component and sub-components to solve hoisting issues
+            const subComponentMarker = '// Sub-components for views';
+            const markerIndex = appTsxContent.indexOf(subComponentMarker);
+            let mainAppContent = appTsxContent;
+            let subComponentsContent = '';
+            if (markerIndex !== -1) {
+                mainAppContent = appTsxContent.substring(0, markerIndex);
+                subComponentsContent = appTsxContent.substring(markerIndex);
+            }
+
+            // 2. Generic cleaning function for TS/TSX files
+            const clean = (content: string) => {
+                return content
+                    .replace(/^import .* from '.*?';\r?\n/gm, '') // remove all imports
+                    .replace(/^export default \w+;/m, '')       // remove default exports
+                    .replace(/^export /gm, '');                   // remove named exports
+            };
+
+            let cleanedMainApp = clean(mainAppContent);
+            
+            // Remove the download function itself to prevent recursion and save space
+            const downloadFunctionRegex = /const handleDownloadApp = async \(\) => \{[\s\S]*?\};/;
+            cleanedMainApp = cleanedMainApp.replace(
+                downloadFunctionRegex,
+                `const handleDownloadApp = () => { alert("This feature is not available in the downloaded version of the app."); };`
+            );
+
+            // 3. Assemble all script parts in the correct order
+            const allScripts = [
+                clean(typesTsContent),
+                clean(constantsTsxContent),
+                clean(storageServiceTsContent),
+                clean(geminiServiceTsContent),
+                clean(mysticalParticlesTsxContent),
+                clean(runeDisplayTsxContent),
+                clean(headerTsxContent),
+                clean(subComponentsContent), // Sub-components MUST come before the main App component
+                cleanedMainApp,
+                clean(indexTsxContent),      // The entry point script goes last
+            ].join('\n\n// --- BUNDLED FILE BOUNDARY --- \n\n');
+
+            // 4. Inject the massive script into the HTML template
+            const finalHtml = indexHtmlContent.replace(
+                '<script type="text/babel" data-type="module" src="./index.tsx"></script>',
+                `<script type="text/babel" data-type="module">\n//<![CDATA[\n(function() {\n${allScripts}\n})();\n//]]>\n</script>`
+            );
+            
+            // 5. Trigger the download
+            const blob = new Blob([finalHtml], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'RuneCast.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+        } catch (error) {
+            console.error("Failed to build the application file:", error);
+            alert("Sorry, there was an error creating the downloadable application file.");
+        }
+    };
 
     const renderHome = () => {
         if (isLoading) {
             return <LoadingView message="The runes are being cast. Awaiting insight..." />;
         }
         if (readingResult) {
-            return <ReadingResultView result={readingResult} onSave={saveCurrentReading} onDiscard={resetReadingFlow} />;
+            return <ReadingResultView result={readingResult} onSave={saveCurrentReading} onDiscard={resetReadingFlow} onExport={handleExportReading} />;
         }
         if (needsFocus) {
              return <FocusView onContinue={() => setNeedsFocus(false)} onSetShowAgain={handleSetShowFocusMessage} />;
@@ -237,6 +333,9 @@ const App: React.FC = () => {
                     retentionDays={retentionDays}
                     onSetRetention={handleSetRetention}
                     onPrune={handlePruneReadings}
+                    onDownloadApp={handleDownloadApp}
+                    showFocusMessage={showFocusMessage}
+                    onSetShowFocusMessage={handleSetShowFocusMessage}
                 />;
             default:
                 return renderHome();
@@ -255,7 +354,20 @@ const App: React.FC = () => {
 };
 
 
-// Sub-components for views to keep App.tsx cleaner
+// Sub-components for views
+
+const LoadingView: React.FC<{message: string}> = ({ message }) => (
+    <div className="text-center p-8 animate-fade-in">
+        <div className="inline-block relative h-16 w-16 mb-4">
+            {ELDER_FUTHARK.slice(0, 8).map((rune, i) => (
+                <div key={rune.name} className="absolute text-amber-400 text-lg" style={{ transform: `rotate(${i * 45}deg) translateY(2.5rem)`, animation: `symbolPulse 2s ease-in-out ${i*0.25}s infinite` }}>
+                    {rune.symbol}
+                </div>
+            ))}
+        </div>
+        <p className="text-xl text-slate-300 shimmer-text">{message}</p>
+    </div>
+);
 
 const FocusView: React.FC<{
     onContinue: () => void;
@@ -279,12 +391,13 @@ const FocusView: React.FC<{
                 <input 
                     type="checkbox" 
                     id="showAgain" 
+                    defaultChecked={true}
                     className="h-4 w-4 rounded border-slate-500 bg-slate-700 text-amber-500 focus:ring-amber-400"
-                    onChange={(e) => onSetShowAgain(!e.target.checked)}
-                    aria-label="Don't show this again"
+                    onChange={(e) => onSetShowAgain(e.target.checked)}
+                    aria-label="Show this again next time"
                 />
                 <label htmlFor="showAgain" className="ml-2 text-sm text-slate-400 cursor-pointer">
-                    Don't show this again
+                    Show this again next time
                 </label>
             </div>
         </div>
@@ -429,7 +542,7 @@ const ReadingResultView: React.FC<{result: Reading; onSave?: () => void; onDisca
                 const interpretation = result.individualRunes?.find(ir => ir.runeName === selectedRune.runeName);
                 return (
                     <div 
-                        key={selectedRune.runeName} 
+                        key={selectedRune.runeName + index}
                         className="flex flex-col md:flex-row items-center gap-6 animate-fade-in-stagger"
                         style={{animationDelay: `${index * 200}ms`}}
                     >
@@ -449,185 +562,101 @@ const ReadingResultView: React.FC<{result: Reading; onSave?: () => void; onDisca
             })}
         </div>
         
-        <div 
-            className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-6 rounded-lg border border-slate-700 space-y-6 animate-fade-in-stagger"
-            style={{animationDelay: `${result.runes.length * 200}ms`}}
-        >
-            <div>
-                <h3 className="text-xl font-display text-amber-300 mb-2">Holistic Interpretation</h3>
-                <p className="text-slate-300 whitespace-pre-wrap">{result.summary}</p>
-            </div>
-            <div>
-                <h3 className="text-xl font-display text-amber-300 mb-2">Reflective Questions</h3>
-                <ul className="list-disc list-inside space-y-2 text-slate-300">
-                    {result.questions.map((q, i) => <li key={i}>{q}</li>)}
-                </ul>
-            </div>
+        <div className="bg-slate-900/70 p-6 rounded-lg border border-slate-700 mb-8 animate-fade-in-stagger" style={{animationDelay: `${result.runes.length * 200}ms`}}>
+            <h3 className="text-2xl font-display text-amber-200 mb-4 shimmer-text">Overall Interpretation</h3>
+            <p className="text-slate-200 whitespace-pre-wrap">{result.summary}</p>
         </div>
 
+        <div className="bg-slate-900/70 p-6 rounded-lg border border-slate-700 mb-8 animate-fade-in-stagger" style={{animationDelay: `${(result.runes.length + 1) * 200}ms`}}>
+            <h3 className="text-2xl font-display text-amber-200 mb-4 shimmer-text">Reflective Questions</h3>
+            <ul className="list-disc list-inside space-y-2 text-slate-300">
+                {result.questions.map((q, i) => <li key={i}>{q}</li>)}
+            </ul>
+        </div>
+        
         {!isJournalView && onSave && onDiscard && (
-            <div 
-                className="flex justify-center gap-4 mt-8 animate-fade-in-stagger"
-                style={{animationDelay: `${(result.runes.length + 1) * 200}ms`}}
-            >
-                <button onClick={onSave} className="px-6 py-2 bg-amber-500 text-slate-900 font-bold rounded-full hover:bg-amber-400 transition">Save to Journal</button>
-                <button onClick={onDiscard} className="px-6 py-2 bg-slate-700 text-slate-200 font-bold rounded-full hover:bg-slate-600 transition">Discard</button>
-            </div>
-        )}
-        {isJournalView && onExport && (
-            <div className="flex justify-center mt-6 no-print">
-                 <button onClick={() => onExport(result.id)} className="px-6 py-2 bg-slate-600 text-slate-200 font-bold rounded-full hover:bg-slate-500 transition">Export as PDF</button>
+            <div className="flex justify-center gap-4 animate-fade-in-stagger" style={{animationDelay: `${(result.runes.length + 2) * 200}ms`}}>
+                <button onClick={onSave} className="px-6 py-2 bg-amber-500 text-slate-900 font-bold rounded-full hover:bg-amber-400 transition-colors">Save to Journal</button>
+                <button onClick={onDiscard} className="px-6 py-2 bg-slate-700 text-slate-200 font-bold rounded-full hover:bg-slate-600 transition-colors">Discard</button>
             </div>
         )}
     </div>
 );
 
+const HistoryView: React.FC<{readings: Reading[], printingReadingId: number | null, onExport: (id: number) => void}> = ({ readings, printingReadingId, onExport }) => {
+  if (readings.length === 0) {
+    return <div className="text-center text-slate-400 animate-fade-in">You have no saved readings.</div>;
+  }
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <h2 className="text-center text-3xl text-amber-200 font-display mb-8 shimmer-text">Reading History</h2>
+      {readings.map(reading => (
+        <div key={reading.id} className={`reading-history-item bg-slate-800/50 p-6 rounded-lg border border-slate-700 ${printingReadingId === reading.id ? 'print-this-reading' : ''}`}>
+           <div className="flex justify-between items-start mb-4">
+                <div>
+                    <h3 className="text-xl font-display text-amber-300">{reading.spread.name}</h3>
+                    <p className="text-sm text-slate-400">{new Date(reading.date).toLocaleString()}</p>
+                </div>
+                <button onClick={() => onExport(reading.id)} className="no-print p-2 rounded-full hover:bg-slate-700 transition-colors" aria-label="Print or export reading">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V4a2 2 0 00-2-2H5zm0 2h10v12H5V4zm2 5a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
+                </button>
+            </div>
+            <ReadingResultView result={reading} isJournalView={true} />
+        </div>
+      ))}
+    </div>
+  );
+};
 
-const LoadingView: React.FC<{message: string}> = ({ message }) => (
-    <div className="text-center p-16 flex flex-col items-center justify-center animate-fade-in">
-        <svg 
-            className="w-20 h-20 text-amber-300 mb-6" 
-            viewBox="0 0 100 100" 
-            fill="none" 
-            xmlns="http://www.w3.org/2000/svg"
-            style={{ animation: 'symbolPulse 3s ease-in-out infinite' }}
+const AnalysisView: React.FC<{readings: Reading[], analysis: PatternAnalysis | null, isAnalyzing: boolean, onGenerate: () => void}> = ({ readings, analysis, isAnalyzing, onGenerate }) => (
+    <div className="max-w-4xl mx-auto text-center animate-fade-in">
+        <h2 className="text-3xl text-amber-200 font-display mb-4 shimmer-text">Pattern Analysis</h2>
+        {readings.length < 5 && <p className="text-slate-400 mb-6">You need at least 5 saved readings to generate a meaningful analysis.</p>}
+        <button 
+            onClick={onGenerate} 
+            disabled={isAnalyzing || readings.length < 5}
+            className="px-6 py-3 bg-amber-500 text-slate-900 font-bold rounded-full hover:bg-amber-400 transition-transform transform hover:scale-105 disabled:bg-slate-600 disabled:cursor-not-allowed disabled:transform-none"
         >
-            <circle cx="50" cy="50" r="45" stroke="currentColor" strokeWidth="2"/>
-            <circle cx="50" cy="50" r="10" stroke="currentColor" strokeWidth="2"/>
-            <path d="M50 35 V5 M50 65 V95 M65 50 H95 M35 50 H5 M62.5 37.5 L82.5 17.5 M37.5 62.5 L17.5 82.5 M37.5 37.5 L17.5 17.5 M62.5 62.5 L82.5 82.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        </svg>
-        <p className="text-xl text-amber-200 font-display shimmer-text">{message}</p>
+            {isAnalyzing ? 'Analyzing...' : 'Analyze Reading History'}
+        </button>
+
+        {isAnalyzing && <div className="mt-8"><LoadingView message="Analyzing patterns across the threads of fate..." /></div>}
+        
+        {analysis && (
+            <div className="mt-8 text-left space-y-6 animate-fade-in">
+                <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-700">
+                    <h3 className="text-2xl font-display text-amber-300 mb-3">Frequent Runes</h3>
+                    <ul className="space-y-3">
+                        {analysis.frequentRunes.map(fr => <li key={fr.runeName}><strong className="text-amber-200">{fr.runeName} (x{fr.count}):</strong> <span className="text-slate-300">{fr.interpretation}</span></li>)}
+                    </ul>
+                </div>
+                 <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-700">
+                    <h3 className="text-2xl font-display text-amber-300 mb-3">Recurring Themes</h3>
+                    <ul className="list-disc list-inside space-y-2 text-slate-300">
+                        {analysis.recurringThemes.map((theme, i) => <li key={i}>{theme}</li>)}
+                    </ul>
+                </div>
+                 <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-700">
+                    <h3 className="text-2xl font-display text-amber-300 mb-3">Overall Summary</h3>
+                    <p className="text-slate-300 whitespace-pre-wrap">{analysis.overallSummary}</p>
+                </div>
+            </div>
+        )}
     </div>
 );
-
-const HistoryView: React.FC<{readings: Reading[]; printingReadingId: number | null, onExport: (id: number) => void}> = ({ readings, printingReadingId, onExport }) => {
-    const [expandedId, setExpandedId] = useState<number | null>(null);
-
-    if (readings.length === 0) {
-        return <div className="text-center text-slate-400">Your journal is empty. Perform a new reading to begin your journey.</div>
-    }
-
-    return (
-        <div className="max-w-4xl mx-auto space-y-4 animate-fade-in">
-            <h2 className="text-3xl text-amber-200 font-display text-center mb-6 shimmer-text">Reading History</h2>
-            {readings.map(reading => (
-                <div key={reading.id} className={`bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden reading-history-item ${printingReadingId === reading.id ? 'print-this-reading' : ''}`}>
-                    <button onClick={() => setExpandedId(expandedId === reading.id ? null : reading.id)} className="w-full p-4 text-left flex justify-between items-center no-print">
-                        <div>
-                            <p className="font-bold text-amber-300">{new Date(reading.date).toLocaleString()}</p>
-                            <p className="text-slate-400 text-sm">{reading.spread.name} - {reading.runes.map(r => r.runeName).join(', ')}</p>
-                        </div>
-                        <svg className={`w-6 h-6 text-slate-400 transition-transform ${expandedId === reading.id ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                    {(expandedId === reading.id || printingReadingId === reading.id) && (
-                        <div className="p-4 md:p-6 border-t border-slate-700">
-                             <ReadingResultView result={reading} isJournalView={true} onExport={onExport} />
-                        </div>
-                    )}
-                </div>
-            ))}
-        </div>
-    );
-};
-
-const AnalysisView: React.FC<{
-    readings: Reading[], 
-    analysis: PatternAnalysis | null, 
-    isAnalyzing: boolean, 
-    onGenerate: () => void
-}> = ({ readings, analysis, isAnalyzing, onGenerate }) => {
-    const MIN_READINGS_FOR_ANALYSIS = 5;
-
-    if (readings.length < MIN_READINGS_FOR_ANALYSIS) {
-        return <div className="text-center text-slate-400">You need at least {MIN_READINGS_FOR_ANALYSIS} readings in your history to generate a pattern analysis. Keep casting to uncover deeper insights.</div>
-    }
-
-    return (
-        <div className="max-w-4xl mx-auto text-center animate-fade-in">
-            <h2 className="text-3xl text-amber-200 font-display mb-4 shimmer-text">Pattern Analysis</h2>
-            <p className="text-slate-400 mb-8">Uncover recurring themes and frequently pulled runes from your reading history.</p>
-            <button onClick={onGenerate} disabled={isAnalyzing} className="px-8 py-3 bg-amber-500 text-slate-900 font-bold rounded-full hover:bg-amber-400 transition disabled:bg-slate-600 disabled:cursor-not-allowed">
-                {isAnalyzing ? 'Analyzing...' : 'Generate Analysis'}
-            </button>
-
-            {isAnalyzing && <LoadingView message="Consulting the threads of fate for patterns..." />}
-            
-            {analysis && (
-                <div className="mt-8 text-left bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-6 rounded-lg border border-slate-700 space-y-6 animate-fade-in">
-                    <div>
-                        <h3 className="text-xl font-display text-amber-300 mb-2">Overall Summary</h3>
-                        <p className="text-slate-300 whitespace-pre-wrap">{analysis.overallSummary}</p>
-                    </div>
-                    <div>
-                        <h3 className="text-xl font-display text-amber-300 mb-2">Recurring Themes</h3>
-                        <ul className="list-disc list-inside space-y-2 text-slate-300">
-                            {analysis.recurringThemes.map((theme, i) => <li key={i}>{theme}</li>)}
-                        </ul>
-                    </div>
-                    <div>
-                        <h3 className="text-xl font-display text-amber-300 mb-2">Frequent Runes</h3>
-                        <div className="space-y-4">
-                            {analysis.frequentRunes.map((item, i) => (
-                                <div key={i} className="p-4 bg-slate-900/50 rounded-md border border-slate-700">
-                                    <p className="font-bold text-amber-200">{item.runeName} (Pulled {item.count} times)</p>
-                                    <p className="text-slate-400 text-sm mt-1">{item.interpretation}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    
-                    {analysis.frequentRunes.length > 0 && (
-                        <div>
-                            <h3 className="text-xl font-display text-amber-300 mb-4 mt-6">Rune Frequency Chart</h3>
-                            <div className="space-y-3 bg-slate-900/50 p-4 rounded-md border border-slate-700">
-                                {(() => {
-                                    const sortedRunes = [...analysis.frequentRunes].sort((a, b) => b.count - a.count);
-                                    const maxCount = Math.max(...sortedRunes.map(r => r.count), 0);
-                                    if (maxCount === 0) return <p className="text-slate-400">No data to display.</p>;
-                                    
-                                    return sortedRunes.map((item, i) => (
-                                        <div key={i} className="flex items-center gap-4 text-sm animate-fade-in-stagger" style={{animationDelay: `${i * 100}ms`}}>
-                                            <span className="w-28 text-right font-medium text-slate-300 truncate" title={item.runeName}>{item.runeName}</span>
-                                            <div className="flex-1 bg-slate-700 rounded-full h-6 flex items-center">
-                                                <div 
-                                                    className="bg-gradient-to-r from-amber-500 to-amber-400 h-full rounded-full flex items-center justify-end px-2 text-slate-900 font-bold transition-all duration-1000 ease-out"
-                                                    style={{ width: `${(item.count / maxCount) * 100}%`}}
-                                                >
-                                                   <span className="opacity-0 animate-fade-in" style={{animationDelay: '1s'}}>{item.count}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ));
-                                })()}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-};
 
 const AboutView: React.FC = () => (
-    <div className="max-w-4xl mx-auto animate-fade-in">
-        <h2 className="text-3xl md:text-4xl text-amber-200 font-display text-center mb-4 shimmer-text">About the Runes</h2>
-        <p className="text-slate-400 text-center mb-10 max-w-2xl mx-auto">The Elder Futhark is the oldest form of the runic alphabets. It consists of 24 runes, often arranged in three groups of eight called ættir, plus a blank rune representing the unknown.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {ELDER_FUTHARK.map(rune => (
-                <div key={rune.name} className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex items-start gap-4 transition-colors hover:border-slate-600">
-                    <div className="flex-shrink-0">
-                        <RuneDisplay rune={rune} />
-                    </div>
-                    <div className="flex-1">
-                        <h3 className="text-xl font-display text-amber-300">{rune.name}</h3>
-                        <p className="font-semibold text-slate-300 text-sm">Keywords: {rune.keywords.join(', ')}</p>
-                        <p className="mt-1 text-slate-400 text-sm">
-                            <strong className="text-slate-300">Upright:</strong> {rune.meaning}
-                        </p>
-                        <p className="mt-1 text-slate-400 text-sm">
-                             <strong className="text-slate-300">Reversed:</strong> {rune.reversedMeaning}
-                        </p>
-                    </div>
+    <div className="max-w-3xl mx-auto animate-fade-in space-y-6 text-slate-300 leading-relaxed">
+        <h2 className="text-3xl text-amber-200 font-display text-center mb-6 shimmer-text">About the Runes</h2>
+        <p>The Elder Futhark is the oldest form of the runic alphabets. It was a system of writing used by Germanic peoples for Northwest Germanic dialects in the Migration Period. The inscriptions are found on artifacts including jewelry, amulets, tools, weapons, and runestones.</p>
+        <p>Beyond their use as a writing system, each rune has a name and a symbolic meaning, representing cosmological principles and powers. To "cast" or "read" the runes is to tap into this ancient wisdom, seeking guidance and insight into the forces at play in one's life.</p>
+        
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-8">
+            {ELDER_FUTHARK.filter(r => r.name !== 'Blank Rune').map(rune => (
+                <div key={rune.name} className="bg-slate-800/50 p-3 rounded-lg border border-slate-700 text-center">
+                    <div className="text-3xl text-amber-300 h-10 w-10 mx-auto flex items-center justify-center">{rune.symbol}</div>
+                    <p className="text-sm font-bold mt-1">{rune.name}</p>
+                    <p className="text-xs text-slate-400">{rune.keywords[0]}</p>
                 </div>
             ))}
         </div>
@@ -635,36 +664,64 @@ const AboutView: React.FC = () => (
 );
 
 const SettingsView: React.FC<{
-    retentionDays: number, 
-    onSetRetention: (days: number) => void,
-    onPrune: () => void
-}> = ({ retentionDays, onSetRetention, onPrune }) => {
-    const options = [{label: '30 Days', value: 30}, {label: '90 Days', value: 90}, {label: '1 Year', value: 365}, {label: 'All Time', value: -1}];
-
-    return (
-        <div className="max-w-xl mx-auto space-y-8 animate-fade-in">
-            <h2 className="text-3xl text-amber-200 font-display text-center mb-6 shimmer-text">Settings</h2>
-            <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-6 rounded-lg border border-slate-700">
-                <h3 className="text-xl font-display text-amber-300 mb-4">Data Management</h3>
-                <div className="space-y-4">
-                    <div>
-                        <label htmlFor="retention" className="block text-sm font-medium text-slate-300 mb-2">Keep reading history for:</label>
-                        <select
-                            id="retention"
-                            value={retentionDays}
-                            onChange={(e) => onSetRetention(Number(e.target.value))}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-md px-3 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                        >
-                            {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                        </select>
-                    </div>
-                    <button onClick={onPrune} className="w-full px-4 py-2 bg-red-800 text-white font-bold rounded-md hover:bg-red-700 transition">
-                        Clear Old Readings Now
-                    </button>
-                </div>
+    retentionDays: number;
+    onSetRetention: (days: number) => void;
+    onPrune: () => void;
+    onDownloadApp: () => void;
+    showFocusMessage: boolean;
+    onSetShowFocusMessage: (show: boolean) => void;
+}> = ({ retentionDays, onSetRetention, onPrune, onDownloadApp, showFocusMessage, onSetShowFocusMessage }) => (
+    <div className="max-w-2xl mx-auto animate-fade-in space-y-8">
+        <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-700">
+            <h2 className="text-2xl font-display text-amber-200 mb-4 shimmer-text">Data Retention</h2>
+            <p className="text-slate-400 mb-4">Choose how long to keep your reading history. Readings older than the selected period will be deleted when you prune.</p>
+            <div className="flex items-center gap-4">
+                <select 
+                    value={retentionDays} 
+                    onChange={(e) => onSetRetention(parseInt(e.target.value, 10))}
+                    className="bg-slate-700 border border-slate-600 rounded-md px-3 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                >
+                    <option value="30">30 Days</option>
+                    <option value="90">90 Days</option>
+                    <option value="365">1 Year</option>
+                    <option value="0">Forever</option>
+                </select>
+                <button 
+                    onClick={onPrune}
+                    className="px-4 py-2 bg-red-800/70 text-red-200 font-semibold rounded-md hover:bg-red-700 transition-colors"
+                >
+                    Prune Old Readings
+                </button>
             </div>
         </div>
-    );
-};
+        
+        <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-700">
+            <h2 className="text-2xl font-display text-amber-200 mb-4 shimmer-text">Preferences</h2>
+            <div className="flex items-center">
+                <input
+                    type="checkbox"
+                    id="showFocus"
+                    checked={showFocusMessage}
+                    onChange={(e) => onSetShowFocusMessage(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-500 bg-slate-700 text-amber-500 focus:ring-amber-400"
+                />
+                <label htmlFor="showFocus" className="ml-3 text-slate-300">
+                    Show the "Moment of Focus" screen before new readings.
+                </label>
+            </div>
+        </div>
+
+        <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-700">
+            <h2 className="text-2xl font-display text-amber-200 mb-4 shimmer-text">Publish App</h2>
+            <p className="text-slate-400 mb-4">Download a single, self-contained HTML file of this application. You can share this file with anyone, and they can run it in their browser without any installation.</p>
+            <button
+                onClick={onDownloadApp}
+                className="px-6 py-3 bg-amber-500 text-slate-900 font-bold rounded-full hover:bg-amber-400 transition-transform transform hover:scale-105"
+            >
+                Download App HTML
+            </button>
+        </div>
+    </div>
+);
 
 export default App;
