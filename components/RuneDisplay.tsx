@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Rune } from '../types';
+import { Rune } from '../types.ts';
 
 interface RuneDisplayProps {
   rune?: Rune | null;

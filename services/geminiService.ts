@@ -1,9 +1,10 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
-import { Reading, ReadingInterpretation, Rune, Spread, PatternAnalysis, SelectedRune } from '../types';
+import { Reading, ReadingInterpretation, Rune, Spread, PatternAnalysis, SelectedRune } from '../types.ts';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-
-export const getReadingInterpretation = async (runes: SelectedRune[], spread: Spread): Promise<ReadingInterpretation> => {
+export const getReadingInterpretation = async (runes: SelectedRune[], spread: Spread, apiKey: string): Promise<ReadingInterpretation> => {
+    const ai = new GoogleGenAI({ apiKey });
+    
     const prompt = `You are Runecast, an expert in Norse mythology and the Elder Futhark runes. Your voice is wise and accessible, using plain English while weaving in relevant Norse context (like mentioning gods or concepts associated with the runes) to add authenticity. Avoid overly academic or archaic language.
 
 A user has performed a rune reading.
@@ -64,14 +65,16 @@ Based on this information, perform the following tasks:
     } catch (error) {
         console.error("Error getting reading interpretation from Gemini:", error);
         return {
-            summary: "An error occurred while interpreting the runes. Please check your API key and network connection.",
+            summary: "An error occurred while interpreting the runes. Please check your API key and network connection. You can reset your API key in the Settings.",
             questions: ["How can you approach this situation with a fresh perspective?"],
             individualRunes: runes.map(r => ({ runeName: r.runeName, orientation: r.orientation, summary: "Could not retrieve interpretation." }))
         };
     }
 };
 
-export const getPatternAnalysis = async (readings: Reading[]): Promise<PatternAnalysis> => {
+export const getPatternAnalysis = async (readings: Reading[], apiKey: string): Promise<PatternAnalysis> => {
+    const ai = new GoogleGenAI({ apiKey });
+    
     const readingHistory = readings.map(r => ({
         date: r.date,
         spread: r.spread.name,
@@ -136,7 +139,7 @@ Analyze the data and provide:
         return {
             frequentRunes: [],
             recurringThemes: ["Could not analyze patterns due to an error."],
-            overallSummary: "There was an issue connecting to the analysis service. Please try again later."
+            overallSummary: "There was an issue connecting to the analysis service. Please check your API key and try again. You can reset your API key in the Settings."
         };
     }
 };

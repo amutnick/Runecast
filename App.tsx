@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useMemo, ReactNode } from 'react';
-import { View, Spread, Rune, Reading, ReadingInterpretation, PatternAnalysis, SelectedRune } from './types';
-import { ELDER_FUTHARK, SPREADS } from './constants';
-import * as storage from './services/storageService';
-import * as gemini from './services/geminiService';
-import Header from './components/Header';
-import RuneDisplay from './components/RuneDisplay';
-import MysticalParticles from './components/MysticalParticles';
+import { View, Spread, Rune, Reading, ReadingInterpretation, PatternAnalysis, SelectedRune } from './types.ts';
+import { ELDER_FUTHARK, SPREADS } from './constants.tsx';
+import * as storage from './services/storageService.ts';
+import * as gemini from './services/geminiService.ts';
+import Header from './components/Header.tsx';
+import RuneDisplay from './components/RuneDisplay.tsx';
+import MysticalParticles from './components/MysticalParticles.tsx';
 
 // Helper function to shuffle an array
 const shuffleArray = <T,>(array: T[]): T[] => {
@@ -16,6 +16,9 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 };
 
 const App: React.FC = () => {
+    const [apiKey, setApiKey] = useState<string | null>(null);
+    const [isKeyChecked, setIsKeyChecked] = useState(false);
+    
     const [view, setView] = useState<View>('home');
     const [readings, setReadings] = useState<Reading[]>([]);
     const [retentionDays, setRetentionDays] = useState<number>(90); // Default to 90 days
@@ -41,6 +44,12 @@ const App: React.FC = () => {
 
 
     useEffect(() => {
+        const key = process.env.API_KEY || localStorage.getItem('runecast_gemini_api_key');
+        if (key) {
+            setApiKey(key);
+        }
+        setIsKeyChecked(true);
+
         setReadings(storage.getReadings());
         const savedRetention = localStorage.getItem('runecast_retention');
         if (savedRetention) {
@@ -59,6 +68,18 @@ const App: React.FC = () => {
         window.addEventListener('afterprint', handleAfterPrint);
         return () => window.removeEventListener('afterprint', handleAfterPrint);
     }, []);
+
+    const handleApiKeySubmit = (key: string) => {
+        if (key && key.trim().length > 0) {
+            localStorage.setItem('runecast_gemini_api_key', key.trim());
+            setApiKey(key.trim());
+        }
+    };
+
+    const handleResetApiKey = () => {
+        localStorage.removeItem('runecast_gemini_api_key');
+        setApiKey(null);
+    };
 
     const handleSelectReadingMode = (mode: 'physical' | 'virtual') => {
         setReadingMode(mode);
@@ -101,10 +122,10 @@ const App: React.FC = () => {
     }
 
     const handleReadingComplete = async () => {
-        if (!currentSpread) return;
+        if (!currentSpread || !apiKey) return;
         setIsLoading(true);
         try {
-            const interpretation: ReadingInterpretation = await gemini.getReadingInterpretation(selectedRunes, currentSpread);
+            const interpretation: ReadingInterpretation = await gemini.getReadingInterpretation(selectedRunes, currentSpread, apiKey);
             const newReading: Reading = {
                 id: Date.now(),
                 date: new Date().toISOString(),
@@ -169,9 +190,10 @@ const App: React.FC = () => {
     }
 
     const handleGenerateAnalysis = async () => {
+        if (!apiKey) return;
         setIsAnalyzing(true);
         setAnalysis(null);
-        const result = await gemini.getPatternAnalysis(readings);
+        const result = await gemini.getPatternAnalysis(readings, apiKey);
         setAnalysis(result);
         setIsAnalyzing(false);
     };
@@ -216,7 +238,6 @@ const App: React.FC = () => {
                 indexHtmlContent,
             ] = await Promise.all(filePromises);
 
-            // 1. Split App.tsx into main component and sub-components to solve hoisting issues
             const subComponentMarker = '// Sub-components for views';
             const markerIndex = appTsxContent.indexOf(subComponentMarker);
             let mainAppContent = appTsxContent;
@@ -226,24 +247,27 @@ const App: React.FC = () => {
                 subComponentsContent = appTsxContent.substring(markerIndex);
             }
 
-            // 2. Generic cleaning function for TS/TSX files
             const clean = (content: string) => {
                 return content
-                    .replace(/^import .* from '.*?';\r?\n/gm, '') // remove all imports
-                    .replace(/^export default \w+;/m, '')       // remove default exports
-                    .replace(/^export /gm, '');                   // remove named exports
+                    .replace(/^import .* from '.*?';\r?\n/gm, '')
+                    .replace(/^export default \w+;/m, '')
+                    .replace(/^export /gm, '');
             };
 
             let cleanedMainApp = clean(mainAppContent);
             
-            // Remove the download function itself to prevent recursion and save space
             const downloadFunctionRegex = /const handleDownloadApp = async \(\) => \{[\s\S]*?\};/;
             cleanedMainApp = cleanedMainApp.replace(
                 downloadFunctionRegex,
                 `const handleDownloadApp = () => { alert("This feature is not available in the downloaded version of the app."); };`
             );
+            
+            cleanedMainApp = cleanedMainApp.replace(
+                `const key = process.env.API_KEY || localStorage.getItem('runecast_gemini_api_key');`,
+                `const key = localStorage.getItem('runecast_gemini_api_key');`
+            );
 
-            // 3. Assemble all script parts in the correct order
+
             const allScripts = [
                 clean(typesTsContent),
                 clean(constantsTsxContent),
@@ -252,18 +276,16 @@ const App: React.FC = () => {
                 clean(mysticalParticlesTsxContent),
                 clean(runeDisplayTsxContent),
                 clean(headerTsxContent),
-                clean(subComponentsContent), // Sub-components MUST come before the main App component
+                clean(subComponentsContent),
                 cleanedMainApp,
-                clean(indexTsxContent),      // The entry point script goes last
+                clean(indexTsxContent),
             ].join('\n\n// --- BUNDLED FILE BOUNDARY --- \n\n');
 
-            // 4. Inject the massive script into the HTML template
             const finalHtml = indexHtmlContent.replace(
                 '<script type="text/babel" data-type="module" src="./index.tsx"></script>',
                 `<script type="text/babel" data-type="module">\n//<![CDATA[\n(function() {\n${allScripts}\n})();\n//]]>\n</script>`
             );
             
-            // 5. Trigger the download
             const blob = new Blob([finalHtml], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -336,12 +358,26 @@ const App: React.FC = () => {
                     onDownloadApp={handleDownloadApp}
                     showFocusMessage={showFocusMessage}
                     onSetShowFocusMessage={handleSetShowFocusMessage}
+                    onResetApiKey={handleResetApiKey}
                 />;
             default:
                 return renderHome();
         }
     };
     
+    if (!isKeyChecked) {
+        return (
+            <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+                <MysticalParticles />
+                <LoadingView message="Initializing..." />
+            </div>
+        );
+    }
+    
+    if (!apiKey) {
+        return <ApiKeySetupView onKeySubmit={handleApiKeySubmit} />;
+    }
+
     return (
         <div className="min-h-screen bg-slate-900">
             <MysticalParticles />
@@ -349,6 +385,60 @@ const App: React.FC = () => {
             <main className="container mx-auto p-4 md:p-8">
                 {renderContent()}
             </main>
+        </div>
+    );
+};
+
+const ApiKeySetupView: React.FC<{onKeySubmit: (key: string) => void}> = ({ onKeySubmit }) => {
+    const [inputKey, setInputKey] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onKeySubmit(inputKey);
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+            <MysticalParticles />
+            <div className="max-w-2xl mx-auto text-center animate-fade-in">
+                <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-8 rounded-lg border border-slate-700 shadow-lg shadow-amber-900/20">
+                    <div className="flex items-center justify-center gap-3 mb-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-amber-300" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v1.065a8.001 8.001 0 11-4 0V2a1 1 0 01.7-1.046 4.002 4.002 0 102.6 0zM12 10a2 2 0 11-4 0 2 2 0 014 0z" clipRule="evenodd" />
+                        </svg>
+                        <h1 className="text-4xl font-bold text-amber-200 font-display tracking-wider">Runecast</h1>
+                    </div>
+                    <h2 className="text-3xl font-display text-amber-200 mb-4 shimmer-text">API Key Required</h2>
+                    <p className="text-slate-300 text-lg leading-relaxed mb-6">
+                        To connect to the arcane energies of the Gemini API, please enter your API key below. Your key will be saved securely in your browser's local storage.
+                    </p>
+                    <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 justify-center mb-6">
+                        <input
+                            type="password"
+                            value={inputKey}
+                            onChange={(e) => setInputKey(e.target.value)}
+                            placeholder="Enter your Gemini API Key"
+                            className="flex-grow bg-slate-900 border border-slate-600 rounded-full px-4 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder-slate-500"
+                            aria-label="Gemini API Key"
+                        />
+                        <button
+                            type="submit"
+                            className="px-6 py-3 bg-amber-500 text-slate-900 font-bold rounded-full hover:bg-amber-400 transition-transform transform hover:scale-105 disabled:bg-slate-600"
+                            disabled={!inputKey}
+                        >
+                            Save & Continue
+                        </button>
+                    </form>
+                    <a 
+                        href="https://ai.google.dev/gemini-api/docs/api-key" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-sm text-amber-400 hover:text-amber-200"
+                    >
+                        Don't have a key? Get one here.
+                    </a>
+                </div>
+            </div>
         </div>
     );
 };
@@ -584,26 +674,48 @@ const ReadingResultView: React.FC<{result: Reading; onSave?: () => void; onDisca
 );
 
 const HistoryView: React.FC<{readings: Reading[], printingReadingId: number | null, onExport: (id: number) => void}> = ({ readings, printingReadingId, onExport }) => {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  const toggleExpand = (id: number) => {
+      setExpandedId(prev => (prev === id ? null : id));
+  };
+
   if (readings.length === 0) {
     return <div className="text-center text-slate-400 animate-fade-in">You have no saved readings.</div>;
   }
+  
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       <h2 className="text-center text-3xl text-amber-200 font-display mb-8 shimmer-text">Reading History</h2>
-      {readings.map(reading => (
-        <div key={reading.id} className={`reading-history-item bg-slate-800/50 p-6 rounded-lg border border-slate-700 ${printingReadingId === reading.id ? 'print-this-reading' : ''}`}>
-           <div className="flex justify-between items-start mb-4">
-                <div>
-                    <h3 className="text-xl font-display text-amber-300">{reading.spread.name}</h3>
-                    <p className="text-sm text-slate-400">{new Date(reading.date).toLocaleString()}</p>
+      {readings.map(reading => {
+        const isExpanded = expandedId === reading.id;
+        return (
+            <div key={reading.id} className={`reading-history-item bg-slate-800/50 rounded-lg border border-slate-700 transition-all duration-300 ${isExpanded ? 'shadow-lg shadow-amber-900/20' : ''} ${printingReadingId === reading.id ? 'print-this-reading' : ''}`}>
+                <div className="p-4 md:p-6 cursor-pointer" onClick={() => toggleExpand(reading.id)}>
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h3 className="text-xl font-display text-amber-300">{reading.spread.name}</h3>
+                            <p className="text-sm text-slate-400">{new Date(reading.date).toLocaleString()}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                             <button onClick={(e) => { e.stopPropagation(); onExport(reading.id); }} className="no-print p-2 rounded-full hover:bg-slate-700 transition-colors" aria-label="Print or export reading">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V4a2 2 0 00-2-2H5zm0 2h10v12H5V4zm2 5a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
+                            </button>
+                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </div>
                 </div>
-                <button onClick={() => onExport(reading.id)} className="no-print p-2 rounded-full hover:bg-slate-700 transition-colors" aria-label="Print or export reading">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V4a2 2 0 00-2-2H5zm0 2h10v12H5V4zm2 5a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
-                </button>
+
+                <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                    <div className="px-4 md:px-6 pb-6 border-t border-slate-700/50 pt-4">
+                        <ReadingResultView result={reading} isJournalView={true} />
+                    </div>
+                </div>
             </div>
-            <ReadingResultView result={reading} isJournalView={true} />
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -670,8 +782,20 @@ const SettingsView: React.FC<{
     onDownloadApp: () => void;
     showFocusMessage: boolean;
     onSetShowFocusMessage: (show: boolean) => void;
-}> = ({ retentionDays, onSetRetention, onPrune, onDownloadApp, showFocusMessage, onSetShowFocusMessage }) => (
+    onResetApiKey: () => void;
+}> = ({ retentionDays, onSetRetention, onPrune, onDownloadApp, showFocusMessage, onSetShowFocusMessage, onResetApiKey }) => (
     <div className="max-w-2xl mx-auto animate-fade-in space-y-8">
+        <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-700">
+            <h2 className="text-2xl font-display text-amber-200 mb-4 shimmer-text">API Configuration</h2>
+            <p className="text-slate-400 mb-4">If you are experiencing connection issues, you can reset and re-enter your Gemini API key.</p>
+            <button
+                onClick={onResetApiKey}
+                className="px-4 py-2 bg-slate-600 text-slate-200 font-semibold rounded-md hover:bg-slate-500 transition-colors"
+            >
+                Reset API Key
+            </button>
+        </div>
+
         <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-700">
             <h2 className="text-2xl font-display text-amber-200 mb-4 shimmer-text">Data Retention</h2>
             <p className="text-slate-400 mb-4">Choose how long to keep your reading history. Readings older than the selected period will be deleted when you prune.</p>

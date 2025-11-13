@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Rune, Spread } from './types';
+import { Rune, Spread } from './types.ts';
 
 export const ELDER_FUTHARK: Rune[] = [
   { name: 'Fehu', symbol: <svg viewBox="0 0 24 32" stroke="currentColor" strokeWidth="2" fill="none"><path d="M12 2 L12 30 M2 12 L12 12 M2 7 L12 7"/></svg>, keywords: ['Wealth', 'Abundance', 'Success'], meaning: 'Represents material wealth, prosperity, and financial strength. It signifies new beginnings and earned income.', reversedKeywords: ['Loss', 'Greed', 'Burnout'], reversedMeaning: 'Loss of personal property or esteem. Greed, burnout, atrophy, or discord.' },

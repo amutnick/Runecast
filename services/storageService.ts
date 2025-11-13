@@ -1,5 +1,5 @@
 
-import { Reading } from '../types';
+import { Reading } from '../types.ts';
 
 const STORAGE_KEY = 'runecast_readings';
 
