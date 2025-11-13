@@ -690,7 +690,7 @@ const HistoryView: React.FC<{readings: Reading[], printingReadingId: number | nu
       {readings.map(reading => {
         const isExpanded = expandedId === reading.id;
         return (
-            <div key={reading.id} className={`reading-history-item bg-slate-800/50 rounded-lg border border-slate-700 transition-all duration-300 ${isExpanded ? 'shadow-lg shadow-amber-900/20' : ''} ${printingReadingId === reading.id ? 'print-this-reading' : ''}`}>
+            <div key={reading.id} className={`reading-history-item bg-slate-800/50 rounded-lg border border-slate-700 transition-shadow duration-300 ${isExpanded ? 'shadow-lg shadow-amber-900/20' : ''} ${printingReadingId === reading.id ? 'print-this-reading' : ''}`}>
                 <div className="p-4 md:p-6 cursor-pointer" onClick={() => toggleExpand(reading.id)}>
                     <div className="flex justify-between items-center">
                         <div>
@@ -708,9 +708,11 @@ const HistoryView: React.FC<{readings: Reading[], printingReadingId: number | nu
                     </div>
                 </div>
 
-                <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                    <div className="px-4 md:px-6 pb-6 border-t border-slate-700/50 pt-4">
-                        <ReadingResultView result={reading} isJournalView={true} />
+                <div className={`grid-collapse ${isExpanded ? 'expanded' : ''}`}>
+                    <div>
+                        <div className="px-4 md:px-6 pb-6 border-t border-slate-700/50 pt-4">
+                            <ReadingResultView result={reading} isJournalView={true} />
+                        </div>
                     </div>
                 </div>
             </div>

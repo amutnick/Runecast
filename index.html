@@ -136,6 +136,19 @@
       .animate-rune-fade-out {
         animation: runeFadeOut 1s ease-in-out;
       }
+      
+      /* New Collapse animation */
+      .grid-collapse {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 0.35s ease-in-out;
+      }
+      .grid-collapse.expanded {
+        grid-template-rows: 1fr;
+      }
+      .grid-collapse > div {
+        overflow: hidden;
+      }
 
       /* Print Styles */
       @media print {
